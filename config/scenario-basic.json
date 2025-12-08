@@ -1,14 +1,10 @@
 {
     "dns": [
-        { "type": "A", "name": "example.com", "value": "10.0.0.5" }
+        { "domain": "example.com", "ip": "10.0.0.5" },
+        { "domain": "google.com", "ip": "8.8.8.8" }
     ],
-
     "routes": [
-        { "cidr": "10.0.0.0/24", "gateway": "192.168.1.1", "interface": "eth0" },
-        { "cidr": "0.0.0.0/0", "gateway": "192.168.1.254", "interface": "eth0" }
-    ],
-
-    "firewall": [
-        { "action": "allow", "protocol": "TCP", "source": "0.0.0.0/0", "dest_port": "80" }
+        { "cidr": "10.0.0.0/24", "gateway": "Direct", "interface": "eth0" },
+        { "cidr": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "wan0" }
     ]
 }
