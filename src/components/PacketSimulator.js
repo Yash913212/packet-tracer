@@ -1,36 +1,27 @@
 const DNSResolver = require('./DNSResolver');
 const RouterEngine = require('./Router');
+const Firewall = require('./Firewall');
 
 class PacketSimulator {
     constructor(configPath) {
         this.resolver = new DNSResolver(configPath);
         this.router = new RouterEngine(configPath);
+        this.firewall = new Firewall(configPath);
     }
 
     async trace(packet) {
+        let ttl = packet.ttl || 5;
+        let hop = 0;
         const trace = [];
-        let ttl = packet.ttl;
-        let hop = 1;
 
-        // --- STEP 1: DNS Resolution ---
-        const dns = this.resolver.resolve(packet.dest);
-
-        // Handle explicit DNS errors
-        if (dns.error) {
+        // 1) DNS Resolution
+        hop++;
+        const dnsRes = this.resolver.resolve(packet.dest);
+        if (!dnsRes.ip) {
             trace.push({
                 hop,
                 location: "DNS",
-                action: dns.error
-            });
-            return trace;
-        }
-
-        // CRITICAL FIX: Check if an IP was actually returned
-        if (!dns.ip) {
-            trace.push({
-                hop,
-                location: "DNS",
-                action: "Error: DNS resolved but returned no IP address."
+                action: `Error: DNS did not return an IP for ${packet.dest}`
             });
             return trace;
         }
@@ -38,24 +29,44 @@ class PacketSimulator {
         trace.push({
             hop,
             location: "DNS",
-            action: `Resolved ${packet.dest} -> ${dns.ip}`
+            action: `Resolved ${packet.dest} -> ${dnsRes.ip}`
         });
 
-        let currentIP = dns.ip;
+        let currentIP = dnsRes.ip;
 
-        // --- STEP 2: Routing Loop ---
+        // --- While TTL > 0, simulate hops ---
         while (ttl > 0) {
             ttl--;
             hop++;
 
-            // Find route for the current IP
-            const route = this.router.findRoute(currentIP);
+            // 2) Firewall Check
+            const fw = this.firewall.check(packet);
+            if (!fw.allowed) {
+                trace.push({
+                    hop,
+                    location: "Firewall",
+                    action: `Blocked by rule index: ${fw.rule}`
+                });
+                return trace;
+            }
 
+            // 3) If TTL died here
+            if (ttl <= 0) {
+                trace.push({
+                    hop,
+                    location: "Router",
+                    action: "TTL expired before reaching destination"
+                });
+                return trace;
+            }
+
+            // 4) Routing
+            const route = this.router.findRoute(currentIP);
             if (!route) {
                 trace.push({
                     hop,
                     location: "Router",
-                    action: `No route found for host: ${currentIP}`
+                    action: `No route to ${currentIP}`
                 });
                 return trace;
             }
@@ -66,9 +77,9 @@ class PacketSimulator {
                 action: `Forwarded to ${route.gateway} via ${route.interface} (Match: ${route.cidr})`
             });
 
-            // Logic Check: If the route is specific (not 0.0.0.0/0), we assume we reached the network
-            // (You might want to adjust this logic depending on your simulation rules)
-            if (route.gateway === '0.0.0.0' || route.gateway === 'Direct') {
+            // 5) Destination reached?
+            if (route.cidr === "10.0.0.0/24") {
+                hop++;
                 trace.push({
                     hop,
                     location: "Destination",
@@ -76,25 +87,9 @@ class PacketSimulator {
                 });
                 return trace;
             }
-
-            // Stop if we hit the default gateway to prevent infinite loops in this basic sim
-            if (route.cidr === "0.0.0.0/0") {
-                trace.push({
-                    hop: hop + 1,
-                    location: "Internet Gateway",
-                    action: "Packet sent to ISP / Internet"
-                });
-                return trace;
-            }
         }
 
-        // If loop finishes without returning
-        trace.push({
-            hop,
-            location: "Router",
-            action: "Time to Live (TTL) exceeded"
-        });
-
+        // Just in case
         return trace;
     }
 }

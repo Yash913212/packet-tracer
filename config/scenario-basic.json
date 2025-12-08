@@ -6,5 +6,10 @@
     "routes": [
         { "cidr": "10.0.0.0/24", "gateway": "Direct", "interface": "eth0" },
         { "cidr": "0.0.0.0/0", "gateway": "192.168.1.1", "interface": "wan0" }
+    ],
+    "firewall": [
+        { "action": "deny", "protocol": "TCP", "source": "0.0.0.0/0", "dest_port": 22 },
+        { "action": "allow", "protocol": "TCP", "source": "0.0.0.0/0", "dest_port": 80 }
     ]
+
 }
