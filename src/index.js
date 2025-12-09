@@ -63,6 +63,11 @@ app.get('/test-route', (req, res) => {
     res.json(route);
 });
 
+// Default server
+app.get('/', (req, res) => {
+    res.send(`Server is running`);
+})
+
 // ----------------------- START SERVER -----------------------
 app.listen(3000, () => {
     console.log('Server running on http://localhost:3000');
