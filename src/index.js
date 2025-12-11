@@ -6,7 +6,7 @@ const path = require('path');
 app.use(express.json());
 
 // Configuration Path
-const dnsConfig = path.join(__dirname, '../config/scenario-basic.json');
+const dnsConfig = path.join(__dirname, '..', 'config', 'scenario-basic.json');
 
 // --- Components ---
 const DNSResolver = require('./components/DNSResolver');
