@@ -22,21 +22,43 @@ class DNSResolver {
         }
 
         // Search for the domain in the DNS list
-        // Supports both Array format [{domain: "x", ip: "y"}] and Object format {"x": "y"}
-        let ip = null;
+        // Supports array format with type: A, CNAME, etc.
+        let result = this._findRecord(domain);
 
+        if (result.error) {
+            return result;
+        }
+
+        // If it's an IP address, return it
+        if (this._isIPAddress(result)) {
+            return { ip: result };
+        }
+
+        // If it's a domain (CNAME), resolve it recursively
+        return this.resolve(result);
+    }
+
+    _findRecord(name) {
         if (Array.isArray(this.config.dns)) {
-            const entry = this.config.dns.find(e => e.domain === domain);
-            if (entry) ip = entry.ip;
+            const entry = this.config.dns.find(e =>
+                (e.domain === name || e.name === name)
+            );
+            if (entry) {
+                // Support both 'ip'/'value' field names
+                return entry.ip || entry.value || null;
+            }
         } else if (typeof this.config.dns === 'object') {
-            ip = this.config.dns[domain];
+            const ip = this.config.dns[name];
+            if (ip) return ip;
         }
 
-        if (ip) {
-            return { ip: ip };
-        } else {
-            return { error: `Domain '${domain}' not found in DNS records.` };
-        }
+        return { error: `NXDOMAIN: Domain '${name}' not found in DNS records.` };
+    }
+
+    _isIPAddress(str) {
+        if (typeof str !== 'string') return false;
+        const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        return ipv4Regex.test(str);
     }
 }
 
