@@ -10,18 +10,18 @@ class PacketSimulator {
     }
 
     async trace(packet) {
-        let ttl = packet.ttl || 5;
+        let ttl = packet.ttl || 30;
         let hop = 0;
         const trace = [];
 
         // 1) DNS Resolution
         hop++;
         const dnsRes = this.resolver.resolve(packet.dest);
-        if (!dnsRes.ip) {
+        if (dnsRes.error) {
             trace.push({
                 hop,
                 location: "DNS",
-                action: `Error: DNS did not return an IP for ${packet.dest}`
+                action: dnsRes.error
             });
             return trace;
         }
@@ -32,53 +32,49 @@ class PacketSimulator {
             action: `Resolved ${packet.dest} -> ${dnsRes.ip}`
         });
 
-        let currentIP = dnsRes.ip;
+        let destinationIP = dnsRes.ip;
 
-        // --- While TTL > 0, simulate hops ---
-        while (ttl > 0) {
-            ttl--;
+        // 2) Firewall Check (before routing)
+        const fw = this.firewall.check({
+            ...packet,
+            source: packet.source || '0.0.0.0'
+        });
+        if (!fw.allowed) {
             hop++;
-
-            // 2) Firewall Check
-            const fw = this.firewall.check(packet);
-            if (!fw.allowed) {
-                trace.push({
-                    hop,
-                    location: "Firewall",
-                    action: `Blocked by rule index: ${fw.rule}`
-                });
-                return trace;
-            }
-
-            // 3) If TTL died here
-            if (ttl <= 0) {
-                trace.push({
-                    hop,
-                    location: "Router",
-                    action: "TTL expired before reaching destination"
-                });
-                return trace;
-            }
-
-            // 4) Routing
-            const route = this.router.findRoute(currentIP);
-            if (!route) {
-                trace.push({
-                    hop,
-                    location: "Router",
-                    action: `No route to ${currentIP}`
-                });
-                return trace;
-            }
-
             trace.push({
                 hop,
-                location: "Router",
-                action: `Forwarded to ${route.gateway} via ${route.interface} (Match: ${route.cidr})`
+                location: "Firewall",
+                action: `Blocked by rule #${fw.rule}`
             });
+            return trace;
+        }
 
-            // 5) Destination reached?
-            if (route.cidr === "10.0.0.0/24") {
+        // 3) Simulate routing hops until destination reached or TTL expires
+        while (ttl > 0) {
+            ttl--;
+
+            // Check if we've reached destination (should match the destination CIDR)
+            const route = this.router.findRoute(destinationIP);
+            if (!route) {
+                hop++;
+                trace.push({
+                    hop,
+                    location: "Router",
+                    action: `No route to host (${destinationIP})`
+                });
+                return trace;
+            }
+
+            hop++;
+
+            // Check if destination is in this route (has direct delivery capability)
+            if (this._isDirectRoute(route)) {
+                trace.push({
+                    hop,
+                    location: "Router",
+                    action: `Forwarded to ${route.gateway} via ${route.interface} (Match: ${route.cidr})`
+                });
+
                 hop++;
                 trace.push({
                     hop,
@@ -87,10 +83,44 @@ class PacketSimulator {
                 });
                 return trace;
             }
+
+            // Forward to next hop
+            trace.push({
+                hop,
+                location: "Router",
+                action: `Forwarded to ${route.gateway} via ${route.interface} (Match: ${route.cidr})`
+            });
+
+            // Check TTL after hop
+            if (ttl <= 0) {
+                hop++;
+                trace.push({
+                    hop,
+                    location: "Router",
+                    action: "TTL expired before reaching destination"
+                });
+                return trace;
+            }
         }
 
-        // Just in case
+        // TTL expired
+        if (ttl <= 0) {
+            hop++;
+            trace.push({
+                hop,
+                location: "Router",
+                action: "TTL exceeded"
+            });
+        }
+
         return trace;
+    }
+
+    _isDirectRoute(route) {
+        // Direct routes have gateway as 'Direct', 'local', or similar
+        return route.gateway === 'Direct' ||
+            route.gateway === 'local' ||
+            route.gateway === 'directly';
     }
 }
 
