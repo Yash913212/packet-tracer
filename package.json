@@ -1,12 +1,21 @@
 {
   "name": "packet-tracer",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Network Simulation API - Simulates packet journey through a virtual network with DNS resolution, routing, and firewall rules",
+  "main": "src/index.js",
   "scripts": {
+    "start": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "networking",
+    "simulation",
+    "dns",
+    "routing",
+    "firewall",
+    "packet-tracer",
+    "network"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
